@@ -1,30 +1,31 @@
 import isFunction from 'lodash/isFunction';
+import memoize from 'memoize-one';
 import PropTypes from 'prop-types';
 import XDate from 'xdate';
-import memoize from 'memoize-one';
 
-import React, {Component} from 'react';
+import React, { Component } from 'react';
 import {
-  View,
-  Dimensions,
   Animated,
-  ViewStyle,
+  Dimensions,
   LayoutChangeEvent,
+  NativeScrollEvent,
   NativeSyntheticEvent,
-  NativeScrollEvent
+  TouchableWithoutFeedback,
+  View,
+  ViewStyle
 } from 'react-native';
 
-import {extractCalendarListProps, extractReservationListProps} from '../componentUpdater';
-import {xdateToData, toMarkingFormat} from '../interface';
-import {sameDate, sameMonth} from '../dateutils';
-import {AGENDA_CALENDAR_KNOB} from '../testIDs';
-import {VelocityTracker} from '../velocityTracker';
-import {DateData, AgendaSchedule} from '../types';
-import {getCalendarDateString} from '../services';
-import styleConstructor from './style';
+import CalendarList, { CalendarListImperativeMethods, CalendarListProps } from '../calendar-list';
 import WeekDaysNames from '../commons/WeekDaysNames';
-import CalendarList, {CalendarListProps, CalendarListImperativeMethods} from '../calendar-list';
-import ReservationList, {ReservationListProps}  from './reservation-list';
+import { extractCalendarListProps, extractReservationListProps } from '../componentUpdater';
+import { sameDate, sameMonth } from '../dateutils';
+import { toMarkingFormat, xdateToData } from '../interface';
+import { getCalendarDateString } from '../services';
+import { AGENDA_CALENDAR_KNOB } from '../testIDs';
+import { AgendaSchedule, DateData } from '../types';
+import { VelocityTracker } from '../velocityTracker';
+import ReservationList, { ReservationListProps } from './reservation-list';
+import styleConstructor from './style';
 
 
 const HEADER_HEIGHT = 104;
@@ -170,6 +171,12 @@ export default class Agenda extends Component<AgendaProps, State> {
     return Math.max(0, this.viewHeight - HEADER_HEIGHT);
   };
 
+  // Minimum scroll position when calendar is expanded (limits how far it can expand)
+  minExpandedPosition = () => {
+    // Calendar expands to 3/4 of screen height (1/4 remains as minimum scroll position)
+    return this.viewHeight * 0.25;
+  };
+
   setScrollPadPosition = (y: number, animated: boolean) => {
     if (this.scrollPad?.current?.scrollTo) {
       this.scrollPad.current.scrollTo({x: 0, y, animated});
@@ -181,7 +188,8 @@ export default class Agenda extends Component<AgendaProps, State> {
 
   toggleCalendarPosition = (open: boolean) => {
     const maxY = this.initialScrollPadPosition();
-    this.setScrollPadPosition(open ? 0 : maxY, true);
+    const minY = this.minExpandedPosition();
+    this.setScrollPadPosition(open ? minY : maxY, true);
     this.enableCalendarScrolling(open);
   };
 
@@ -299,10 +307,12 @@ export default class Agenda extends Component<AgendaProps, State> {
     this.knobTracker.add(currentY);
     const projectedY = currentY + this.knobTracker.estimateSpeed() * 250; /*ms*/
     const maxY = this.initialScrollPadPosition();
-    const snapY = projectedY > maxY / 2 ? maxY : 0;
+    const minY = this.minExpandedPosition();
+    const midPoint = (maxY + minY) / 2;
+    const snapY = projectedY > midPoint ? maxY : minY;
     this.setScrollPadPosition(snapY, true);
 
-    this.enableCalendarScrolling(snapY === 0);
+    this.enableCalendarScrolling(snapY === minY);
   };
 
   onVisibleMonthsChange = (months: DateData[]) => {
@@ -328,6 +338,12 @@ export default class Agenda extends Component<AgendaProps, State> {
     this.setState({selectedDay: day});
 
     this.props.onDayChange?.(xdateToData(day));
+  };
+
+  onReservationsTouch = () => {
+    if (this.state.calendarScrollable) {
+      this.toggleCalendarPosition(false);
+    }
   };
 
   renderReservations() {
@@ -448,18 +464,28 @@ export default class Agenda extends Component<AgendaProps, State> {
       weekdaysStyle.push({height: HEADER_HEIGHT});
     }
 
+    const minExpandedPos = this.minExpandedPosition();
     const openCalendarScrollPadPosition =
-      !hideKnob && this.state.calendarScrollable && this.props.showClosingKnob ? agendaHeight + HEADER_HEIGHT : 0;
+      !hideKnob && this.state.calendarScrollable && this.props.showClosingKnob ? this.viewHeight - minExpandedPos : 0;
     const shouldAllowDragging = !hideKnob && !this.state.calendarScrollable;
-    const scrollPadPosition = (shouldAllowDragging ? HEADER_HEIGHT : openCalendarScrollPadPosition) - KNOB_HEIGHT;
+    
+    // When collapsed (shouldAllowDragging), use full row height for easier touch target
+    // When expanded, use knob height only for collapsing
+    const ROW_HEIGHT = 50;
+    const touchTargetHeight = shouldAllowDragging ? ROW_HEIGHT : KNOB_HEIGHT;
+    const scrollPadTop = shouldAllowDragging 
+      ? HEADER_HEIGHT - ROW_HEIGHT 
+      : openCalendarScrollPadPosition - KNOB_HEIGHT;
     const scrollPadStyle = {
-      height: KNOB_HEIGHT,
-      top: scrollPadPosition
+      height: touchTargetHeight,
+      top: scrollPadTop
     };
 
     return (
       <View testID={testID} onLayout={this.onLayout} style={[style, this.style.container]}>
-        <View style={this.style.reservations}>{this.renderReservations()}</View>
+        <TouchableWithoutFeedback onPress={this.onReservationsTouch}>
+          <View style={this.style.reservations}>{this.renderReservations()}</View>
+        </TouchableWithoutFeedback>
         <Animated.View style={headerStyle}>
           <Animated.View style={[this.style.animatedContainer, {transform: [{translateY: contentTranslate}]}]}>
             {this.renderCalendarList()}
@@ -486,7 +512,7 @@ export default class Agenda extends Component<AgendaProps, State> {
         >
           <View
             testID={AGENDA_CALENDAR_KNOB}
-            style={{height: agendaHeight + KNOB_HEIGHT}}
+            style={{height: agendaHeight + ROW_HEIGHT}}
             onLayout={this.onScrollPadLayout}
           />
         </Animated.ScrollView>
