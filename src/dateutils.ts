@@ -150,8 +150,12 @@ export function page(date: XDate, firstDayOfWeek = 0, showSixWeeks = false) {
 
   const daysForSixWeeks = (daysBefore + days.length) / 6 >= 6;
 
+  // Only add a 6th row when it would contain at least one day of the current month
   if (showSixWeeks && !daysForSixWeeks) {
-    to.addDays(7);
+    const firstDayOfExtraWeek = to.clone().addDays(1);
+    if (sameMonth(firstDayOfExtraWeek, date)) {
+      to.addDays(7);
+    }
   }
 
   if (isLTE(from, days[0])) {
