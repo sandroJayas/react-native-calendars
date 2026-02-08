@@ -257,8 +257,7 @@ docsRNC/
 scripts/
 
 # Typescript
-# ignore the .ts files
-*.ts
-*.tsx
+# NOTE: .ts/.tsx files are NOT ignored so the package works when installed
+# directly from GitHub (no build step).
 # include the .d.ts files
 !*.d.ts 
