@@ -32,6 +32,16 @@ export interface EventBlockProps {
 const TEXT_LINE_HEIGHT = 17;
 const EVENT_DEFAULT_COLOR = '#add8e6';
 
+/** Darken a hex color by a factor (0–1; lower = darker). */
+function darkenHex(hex: string, factor: number = 0.9): string {
+  const match = hex.replace(/^#/, '').match(/.{2}/g);
+  if (!match) return hex;
+  const r = Math.round(parseInt(match[0], 16) * factor);
+  const g = Math.round(parseInt(match[1], 16) * factor);
+  const b = Math.round(parseInt(match[2], 16) * factor);
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
+
 const EventBlock = (props: EventBlockProps) => {
   const {index, event, renderEvent, onPress, format24h, styles} = props;
 
@@ -40,12 +50,14 @@ const EventBlock = (props: EventBlockProps) => {
   const numberOfLines = Math.floor(event.height / TEXT_LINE_HEIGHT);
   const formatTime = format24h ? 'HH:mm' : 'hh:mm A';
   const eventStyle = useMemo(() => {
+    const backgroundColor = event.color ? event.color : EVENT_DEFAULT_COLOR;
     return {
       left: event.left,
       height: event.height,
       width: event.width,
       top: event.top,
-      backgroundColor: event.color ? event.color : EVENT_DEFAULT_COLOR
+      backgroundColor,
+      borderColor: darkenHex(backgroundColor)
     };
   }, [event]);
 
