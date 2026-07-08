@@ -1,0 +1,30 @@
+version: 2.1
+
+jobs:
+  first:
+    docker:
+      - image: cimg/base:current
+    steps:
+      - run:
+          name: First job
+          command: echo "Running the first job"
+
+  third:
+    docker:
+      - image: cimg/base:current
+    steps:
+      - run:
+          name: Third job
+          command: echo "Running the third job (after approval)"
+
+workflows:
+  approval-workflow:
+    jobs:
+      - first
+      - second:
+          type: approval
+          requires:
+            - first
+      - third:
+          requires:
+            - second
